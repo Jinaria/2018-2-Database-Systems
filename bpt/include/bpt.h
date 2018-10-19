@@ -87,6 +87,7 @@ int insert(int64_t key, char * value);
 // Deletion
 
 int get_neighbor_index(pagenum_t p);
+void remove_entry_from_page(pagenum_t pn, int64_t key);
 int adjust_root();
 int coalesce_pages(pagenum_t pn, pagenum_t neighbor_num, int neighbor_index, int64_t k_prime);
 int delete_entry(pagenum_t p, int64_t key);
