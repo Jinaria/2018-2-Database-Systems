@@ -14,8 +14,8 @@
 #endif
 
 #define PAGE_SIZE 4096
-#define LEAF_ORDER 5
-#define INTERNAL_ORDER 5
+#define LEAF_ORDER 32
+#define INTERNAL_ORDER 249
 #define MAX_LENGTH 120
 
 typedef unsigned long long pagenum_t;
