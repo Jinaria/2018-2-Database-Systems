@@ -10,6 +10,7 @@
 #include <sstream>
 #include <vector>
 #include <iostream>
+#include <utility>
 #ifdef WINDOWS
 #endif
 
@@ -130,9 +131,7 @@ typedef struct query{
 
 typedef struct table{
 	vector<int64_t *> record;
-	int64_t * index;
 	int index_size;
-	bool is_joined;
 }table;
 
 extern buffer_manager bm;
@@ -191,10 +190,9 @@ int erase(int table_id, int64_t key);
 
 // Join 
 void swap(int * a, int * b);
-void parse(string  query);
+int parse(string query);
 query_t parse_query(string q);
 vector<query_t> sort_query(vector<query_t> v);
-void parse(string query);
 void read_table(int table_id);
 void join_one_query(query_t q);
 int64_t join(const char * query);

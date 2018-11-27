@@ -11,12 +11,13 @@ int table_count = 0;
 int next_table_num = 1;
 
 vector<query_t> query_set;
-int query_num;
-int using_table[TABLE_LIMIT + 1];
-int joined_table[TABLE_LIMIT + 1];
+int joined_table[TABLE_LIMIT + 1] = {-1, };
+int table_num = 0;
 
 table join_table[TABLE_LIMIT + 1];
-
+vector< vector<pair<int64_t, int64_t> > > index_record;
+#define INDEX(row, table) index_record[row][table].first
+#define KEY(row, table) index_record[row][table].second
 // Buffer Manager
 
 void print_page(buffer * buf){
@@ -940,7 +941,6 @@ void swap(int * a, int * b){
     *b = temp;
 }
 query_t parse_query(string q){
-    cout << "parse_query" << endl;
     int t1, t2, c1, c2;
     stringstream qs(q);
 
@@ -965,11 +965,6 @@ query_t parse_query(string q){
         swap(&t1, &t2);
         swap(&c1, &c2);
     }
-    if(using_table[t1] == 0)
-        using_table[t1] = 1;
-    if(using_table[t2] == 0)
-        using_table[t2] = 1;
-
     query_t temp;
     temp.t1 = t1;
     temp.c1 = c1;
@@ -980,7 +975,6 @@ query_t parse_query(string q){
 }
 
 vector<query_t> sort_query(vector<query_t> v){
-    cout << "sort_query" << endl;
     vector<query_t> q;
     int num = v.size();
     int index[9] = {0, };
@@ -1008,17 +1002,20 @@ vector<query_t> sort_query(vector<query_t> v){
     return q;
 }
 
-void parse(string query){
-    cout << "parse" << endl;
+int parse(string query){
+    int cnt = 0;
     stringstream ss(query);
     string temp;
-    while(getline(ss, temp, '&'))
+    while(getline(ss, temp, '&')){
+        cnt++;
         query_set.push_back(parse_query(temp));
-    query_set = sort_query(query_set);    
+    }
+    query_set = sort_query(query_set);
+
+    return cnt;
 }
 
 void read_table(int table_id){
-    cout << "read_table" << endl;
     buffer * header = get_buffer(table_id, 0);
     buffer * temp = get_buffer(table_id, header->frame->root_page_offset / PAGE_SIZE);
     while(!temp->frame->is_leaf){
@@ -1045,76 +1042,90 @@ void read_table(int table_id){
         }
         join_table[table_id].record.push_back(row);
     }
-    join_table[table_id].index = new int64_t[join_table[table_id].record.size()]();
-    join_table[table_id].is_joined = false;
     join_table[table_id].index_size = join_table[table_id].record.size();
-    for(int i = 0; i < join_table[table_id].index_size; i++){
-        join_table[table_id].index[i] = i;
-    }
-
+   
     
     header->pin_count = 0;
     temp->pin_count = 0;
 }
 
 void join_one_query(query_t q){
-    cout << "join_one_query " << endl;
-    int index = 0;
-    int64_t *arr1, *arr2;
-    int i1, i2;
-    arr1 = new int64_t[join_table[q.t1].index_size];
-    arr2 = new int64_t[join_table[q.t2].index_size];
+    vector<vector<pair<int64_t, int64_t> > > tv;
     // cout << join_table[q.t1].index_size << endl;
     // cout << join_table[q.t2].index_size << endl;
-    for(int i = 0; i < join_table[q.t1].index_size; i++){
-        for(int j = 0; j < join_table[q.t2].index_size; j++){
-            // cout << join_table[q.t1].index[i] << ' ';
-            // cout << join_table[q.t2].index[j] << endl;
-            i1 = join_table[q.t1].index[i];
-            i2 = join_table[q.t2].index[j];
-            if(join_table[q.t1].record[i1][q.c1 - 1] == join_table[q.t2].record[i2][q.c2 - 1]){
-                arr1[index] = i1;
-                arr2[index++] = i2;
-                cout << index << endl;
+
+    if(table_num == 0){
+        joined_table[q.t1] = table_num++;
+        joined_table[q.t2] = table_num++;
+        for(int i = 0; i < join_table[q.t1].index_size; i++){
+            for(int j = 0; j < join_table[q.t2].index_size; j++){
+                if(join_table[q.t1].record[i][q.c1 - 1] == join_table[q.t2].record[j][q.c2 - 1]){
+                    vector<pair<int64_t, int64_t> > v;
+                    v.push_back(make_pair(i, join_table[q.t1].record[i][0]));
+                    v.push_back(make_pair(j, join_table[q.t2].record[j][0]));
+                    index_record.push_back(v);
+                    
+                }
             }
         }
+        // index_set = new bool[index]();
     }
-    join_table[q.t1].index_size = index;
-    join_table[q.t2].index_size = index;
-    memcpy(join_table[q.t1].index, arr1, sizeof(int64_t) * index);
-    memcpy(join_table[q.t2].index, arr2, sizeof(int64_t) * index);
+    else{
+        if(joined_table[q.t1] != -1){
+            joined_table[q.t2] = table_num++;
+            for(int i = 0; i < index_record.size(); i++){
+                for(int j = 0; j < join_table[q.t2].index_size; j++){
+                    if(join_table[q.t1].record[INDEX(i, joined_table[q.t1])][q.c1 - 1] == join_table[q.t2].record[j][q.c2 - 1]){
+                        index_record[i].push_back(make_pair(j, join_table[q.t2].record[j][0]));
+                        tv.push_back(index_record[i]);
+                        index_record[i].pop_back();
+                    }
+                }
+            }
+            // join_table[q.t2].index_size = index;
+        }
+        else{
+            joined_table[q.t1] = table_num++;
+            for(int i = 0; i < index_record.size(); i++){
+                for(int j = 0; j < join_table[q.t1].index_size; j++){
+                    if(join_table[q.t1].record[j][q.c1 - 1] == join_table[q.t2].record[INDEX(i, joined_table[q.t2])][q.c2 - 1]){
+                        index_record[i].push_back(make_pair(j, join_table[q.t1].record[j][0]));
+                        tv.push_back(index_record[i]);
+                        index_record[i].pop_back();
+                    }
+                }
+            }
+
+            index_record = tv;
+            // join_table[q.t1].index_size = index;
+        }
+    }
+    // if(index_set != NULL)
+       // delete index_set;
 }
 
 void init_join(){
     query_set.clear();
     for(int i = 1; i <= TABLE_LIMIT; i++){
-        if(using_table[i] == 1){
-            for(int j = 0; j < join_table[i].index_size; j++)
-                join_table[i].index[j] = j;
-        }
-        using_table[i] = 0;
-        joined_table[i] = 0;
+        joined_table[i] = -1;
     }
+    for(int i = 0; i < index_record.size(); i++)
+        index_record[i].clear();
+    index_record.resize(0);
+    table_num = 0;
 }
 
 int64_t join(const char * query){
-    cout << "join" << endl;
     string query_s(query);
-    parse(query_s);
-    // for(int i = 1; i <= TABLE_LIMIT; i++){
-    //     if(using_table[i] == 1)
-    //         read_table(i);
-    // }
-    for(int i = 0; i < query_set.size(); i++){
-        cout << query_set[i].t1 << ' ' << query_set[i].c1 << ' ';
-        cout << query_set[i].t2 << ' ' << query_set[i].c2 << endl;
+    int query_num = parse(query_s);
+    for(int i = 0; i < query_num; i++){
         join_one_query(query_set[i]);
     }
     int64_t sum = 0;
-    for(int i = 1; i <= TABLE_LIMIT; i++){
-        if(using_table[i] == 1){
-            for(int j = 0; j < join_table[i].index_size; j++){
-                sum += join_table[i].record[join_table[i].index[j]][0];
+    for(int j = 0; j < index_record.size(); j++){
+        if(index_record[j].size() == table_num){
+            for(int i = 0; i < table_num; i++){
+                sum += KEY(j, i);
             }
         }
     }
