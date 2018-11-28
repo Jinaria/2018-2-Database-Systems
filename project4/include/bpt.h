@@ -143,6 +143,7 @@ extern int next_table_num;
 
 //Utility and Find
 //int path_to_root(pagenum_t child);
+void print_page(buffer * buf);
 void print_tree(int table_id);
 buffer * find_leaf(int table_id, int64_t key);
 int64_t * find(int table_id, int64_t key);

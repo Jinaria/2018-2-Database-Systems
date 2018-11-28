@@ -50,9 +50,7 @@ void print_tree(int table_id) {
     int front = 0;
     int rear = 0;
 
-    // Table* table = get_table(table_id);
     buffer * header = get_buffer(table_id, 0);
-    // print_buf_pool();
     if (header->frame->root_page_offset == 0) {
         printf("Empty tree.\n");
         return;
@@ -65,54 +63,34 @@ void print_tree(int table_id) {
     rear++;
     while (front < rear) {
         pagenum_t page_offset = queue[front];
-        // cin >> i;
         front++;
         if (page_offset == 0) {
             printf("\n");
             
             if (front == rear) break;
 
-            // next tree level
             queue[rear] = 0;
             rear++;
             continue;
         }
         
-        // NodePage* node_page;
         buffer * page;
-        // node_page = (NodePage*)get_page(table, FILEOFF_TO_PAGENUM(page_offset));
         page = get_buffer(table_id, page_offset / PAGE_SIZE);
         if (page->frame->is_leaf) {
-            // leaf node
-            // LeafPage* leaf_node = (LeafPage*)node_page;
             for (i = 0; i < page->frame->num_of_keys; i++) {
-                // printf("%" PRIu64 " ", LEAF_KEY(leaf_node, i));
                 cout << page->frame->leaf[i].key << ' ';
             }
             printf("| ");
         } else {
-            // internal node
-            // InternalPage* internal_node = (InternalPage*)node_page;
             queue[rear] = page->frame->left_page_offset;
             rear++;
             for (i = 0; i < page->frame->num_of_keys; i++) {
-                // printf("%" PRIu64 " ", INTERNAL_KEY(internal_node, i));
                 cout << page->frame->internal[i].key << ' ';
-                // queue[rear] = INTERNAL_OFFSET(internal_node, i);
                 queue[rear] = page->frame->internal[i].page_offset;
-                // NodePage* child_node = (NodePage*) get_page(table,
-                        // FILEOFF_TO_PAGENUM(INTERNAL_OFFSET(internal_node, i)));
-                // if (child_node->parent != page_offset){
-                //     PANIC("btree structure crashed");
-                // }
-                // release_page((Page*)child_node);
                 rear++;
             }
-            // queue[rear] = INTERNAL_OFFSET(internal_node, i);
-            // rear++;
             printf("| ");
         }
-        // release_page((Page*)node_page);
     }
     free(queue);
 }
@@ -121,7 +99,6 @@ int init_db(int num_buf){
     int i;
     bm.capacity = num_buf;
     bm.buffer_num = 0;
-    // bm.bf = (buffer *)calloc(1, sizeof(buffer) * num_buf);
     bm.bf = new buffer[num_buf]();
     if(bm.bf == NULL)
         return -1;
@@ -691,7 +668,6 @@ int insert_into_page_after_splitting(buffer * old_page, int left_index, int64_t 
         child->frame->page_offset = new_page_num * PAGE_SIZE;
         child->is_dirty = true;
         child->pin_count--;
-        // file_write_page(new_page->internal[i].page_offset, child);
     }
 
     return insert_into_parent(old_page->table_id, old_page, k_prime, new_page);
@@ -713,9 +689,7 @@ int insert(int table_id, int64_t key, int64_t * value){
         header_buf->pin_count--;
         return -1;
     }
-    // leaf_num = find_leaf(key);
     leaf = find_leaf(table_id, key);
-    // file_read_page(leaf_num, &leaf);
     if(leaf->frame->num_of_keys < leaf_order - 1){
         insert_into_leaf(leaf, key, value);
         return 0;
@@ -729,21 +703,14 @@ int insert(int table_id, int64_t key, int64_t * value){
 
 int get_neighbor_index(buffer * buf){
     int i;
-    // page * p, * parent;
     buffer * parent = get_buffer(buf->table_id, buf->frame->page_offset / PAGE_SIZE);
-    // file_read_page(n, &p);
-    // file_read_page(p->page_offset, &parent);
     if(parent->frame->left_page_offset == buf->page_num * PAGE_SIZE){
-        // free(p);
-        // free(parent);
         parent->pin_count--;
         
         return -2;
     }
     for(i = 0; i < parent->frame->num_of_keys; i++){
         if(parent->frame->internal[i].page_offset == buf->page_num * PAGE_SIZE){
-            // free(parent);
-            // free(p);
             parent->pin_count--;
             return i - 1;
         }
@@ -774,17 +741,13 @@ void remove_entry_from_page(buffer * buf, int64_t key){
 
 int adjust_root(buffer * buf){
     
-    // page * p, * child;
     buffer * child, * header;
-    // file_read_page(pn, &p);
     header = get_buffer(buf->table_id, 0);
     if(buf->frame->num_of_keys == 0){
         if(!buf->frame->is_leaf){
-            // file_read_page(p->right_page_offset, &child);
             child = get_buffer(buf->table_id, buf->frame->left_page_offset / PAGE_SIZE);
             child->frame->page_offset = 0;
             header->frame->root_page_offset = buf->frame->left_page_offset / PAGE_SIZE;
-            // file_write_page(p->right_page_offset, child);
             file_free_page(buf);
 
             header->is_dirty = true;
@@ -806,23 +769,13 @@ int adjust_root(buffer * buf){
 int coalesce_nodes(buffer * buf, pagenum_t neighbor_num, int neighbor_index, int64_t k_prime){
     int i, j, neighbor_insertion_index, n_end;
     pagenum_t parent_num;
-    // page * tmp;
 
-    // page * p, * neighbor;
     buffer * neighbor, * tmp, * parent;
     pagenum_t tmp_num;
 
-    // file_read_page(pn, &p);
-    // file_read_page(neighbor_num, &neighbor);
     neighbor = get_buffer(buf->table_id, neighbor_num);
 
     if(neighbor_index == -2){
-        // tmp = p;
-        // tmp_num = pn;
-        // p = neighbor;
-        // pn = neighbor_num;
-        // neighbor = tmp;
-        // neighbor_num = tmp_num;
         tmp = buf;
         buf = neighbor;
         neighbor = tmp;
@@ -842,21 +795,16 @@ int coalesce_nodes(buffer * buf, pagenum_t neighbor_num, int neighbor_index, int
             buf->frame->num_of_keys--;
         }
     
-        // file_read_page(neighbor->right_page_offset, &tmp);
         tmp = get_buffer(buf->table_id, neighbor->frame->left_page_offset / PAGE_SIZE);
         tmp->frame->page_offset = neighbor_num * PAGE_SIZE;
-        // file_write_page(neighbor->right_page_offset, tmp);
         tmp->is_dirty = true;
         tmp->pin_count--;
         for(i = 0; i < neighbor->frame->num_of_keys; i++){
-            // file_read_page(neighbor->internal[i].page_offset, &tmp);
             tmp = get_buffer(buf->table_id, neighbor->frame->internal[i].page_offset / PAGE_SIZE);
             tmp->frame->page_offset = neighbor_num * PAGE_SIZE;
-            // file_write_page(neighbor->internal[i].page_offset, tmp);
             tmp->is_dirty = true;
             tmp->pin_count--;
         }
-        // file_write_page(neighbor_num, neighbor);
         
     }
     else{
@@ -865,7 +813,6 @@ int coalesce_nodes(buffer * buf, pagenum_t neighbor_num, int neighbor_index, int
             neighbor->frame->num_of_keys++;
         }
         neighbor->frame->right_page_offset = buf->frame->right_page_offset;
-        // file_write_page(neighbor_num, neighbor);
        
     }
     neighbor->is_dirty = true;
@@ -874,14 +821,12 @@ int coalesce_nodes(buffer * buf, pagenum_t neighbor_num, int neighbor_index, int
     buf->pin_count--;
     parent = get_buffer(buf->table_id, parent_num);
     i = delete_entry(buf->table_id, parent, k_prime);
-    // free(neighbor);
-    // free(p);
+
     return 0;
 }
 
 int delete_entry(int table_id, buffer * buf, int64_t key){
     pagenum_t neighbor_num;
-    // page * neighbor_insertion_indexghbor, * p, * parent;
     buffer * parent, * header;
     int neighbor_index;
     int k_prime_index;
@@ -890,11 +835,9 @@ int delete_entry(int table_id, buffer * buf, int64_t key){
 
     header = get_buffer(table_id, 0);
 
-    // remove_entry_from_page(pn, key);
     remove_entry_from_page(buf, key);
     if(buf->page_num * PAGE_SIZE == header->frame->root_page_offset)
         return adjust_root(buf);
-    // file_read_page(pn, &p);
 
     if(buf->frame->num_of_keys > 0){
         buf->is_dirty = true;
@@ -902,7 +845,6 @@ int delete_entry(int table_id, buffer * buf, int64_t key){
         return 0;
     }
 
-    // file_read_page(p->page_offset, &parent);
     parent = get_buffer(table_id, buf->frame->page_offset / PAGE_SIZE);
     neighbor_index = get_neighbor_index(buf);
     if(neighbor_index == -2){                       
@@ -1051,9 +993,7 @@ void read_table(int table_id){
 
 void join_one_query(query_t q){
     vector<vector<pair<int64_t, int64_t> > > tv;
-    // cout << join_table[q.t1].index_size << endl;
-    // cout << join_table[q.t2].index_size << endl;
-
+   
     if(table_num == 0){
         joined_table[q.t1] = table_num++;
         joined_table[q.t2] = table_num++;
@@ -1081,7 +1021,6 @@ void join_one_query(query_t q){
                 }
             }
             index_record = tv;
-            // join_table[q.t2].index_size[] = index;
         }
         else{
             joined_table[q.t1] = table_num++;
@@ -1096,11 +1035,8 @@ void join_one_query(query_t q){
             }
 
             index_record = tv;
-            // join_table[q.t1].index_size = index;
         }
     }
-    // if(index_set != NULL)
-       // delete index_set;
 }
 
 void init_join(){
