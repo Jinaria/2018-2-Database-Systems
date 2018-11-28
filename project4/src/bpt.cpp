@@ -1050,6 +1050,7 @@ void read_table(int table_id){
 }
 
 void join_one_query(query_t q){
+    cout << "join_one_query\n";
     vector<vector<pair<int64_t, int64_t> > > tv;
     // cout << join_table[q.t1].index_size << endl;
     // cout << join_table[q.t2].index_size << endl;
@@ -1064,10 +1065,13 @@ void join_one_query(query_t q){
                     v.push_back(make_pair(i, join_table[q.t1].record[i][0]));
                     v.push_back(make_pair(j, join_table[q.t2].record[j][0]));
                     index_record.push_back(v);
-                    
                 }
             }
         }
+        cout << "index size " << index_record.size();
+        for(int i = 0; i < index_record.size(); i++)
+            cout << index_record[i].size() << ' ';
+        cout << endl;
         // index_set = new bool[index]();
     }
     else{
@@ -1082,7 +1086,13 @@ void join_one_query(query_t q){
                     }
                 }
             }
-            // join_table[q.t2].index_size = index;
+            cout << "tv size " << tv.size();
+            for(int i = 0; i < tv.size(); i++)
+                cout << tv[i].size() << ' ';
+            cout << endl;
+
+            index_record = tv;
+            // join_table[q.t2].index_size[] = index;
         }
         else{
             joined_table[q.t1] = table_num++;
@@ -1095,6 +1105,10 @@ void join_one_query(query_t q){
                     }
                 }
             }
+            cout << "tv size " << tv.size();
+            for(int i = 0; i < tv.size(); i++)
+                cout << tv[i].size() << ' ';
+            cout << endl;
 
             index_record = tv;
             // join_table[q.t1].index_size = index;
