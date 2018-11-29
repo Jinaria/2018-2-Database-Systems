@@ -11,6 +11,7 @@
 #include <vector>
 #include <iostream>
 #include <utility>
+#include <pthread.h>
 #ifdef WINDOWS
 #endif
 
@@ -136,6 +137,13 @@ typedef struct table{
 	int column;
 	int index_size;
 }table;
+
+typedef struct table_data{
+	bool is_first;
+	bool q1_first;
+	query_t query;
+	int thread_num;
+}table_data;
 
 extern buffer_manager bm;
 extern int leaf_order;

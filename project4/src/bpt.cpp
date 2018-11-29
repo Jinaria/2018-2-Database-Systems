@@ -18,6 +18,8 @@ table table_list[TABLE_LIMIT + 1];
 vector< vector<pair<int64_t, int64_t> > > index_record;
 #define INDEX(row, table) index_record[row][table].first
 #define KEY(row, table) index_record[row][table].second
+
+int nthread = 1;
 // Buffer Manager
 
 void print_table(int table_id){
@@ -283,9 +285,6 @@ int open_table(char * pathname, int num_column){
         return -1;
     }
     // header = (page*)calloc(1, PAGE_SIZE);
-    for(int i = 1; i <= TABLE_LIMIT; i++){
-        cout << "table_column " << table_list[i].column << endl;
-    }
     header = new page();
     id = next_table_num;
     for(i = 1; i <= TABLE_LIMIT; i++){
@@ -1066,10 +1065,36 @@ void init_join(){
     table_num = 0;
 }
 
+// void * join_one_query(void * data_t){
+
+// }
+
 int64_t join(const char * query){
+    init_join();
     string query_s(query);
     int query_num = parse(query_s);
+    // pthread_t * thd = malloc(sizeof(pthread_t) * nthread);
+    // table_data * data = new table_data[nthread]();
+    // for(int i = 0; i < nthread; i++){
+    //     data[i].is_first = 
+    // }
     for(int i = 0; i < query_num; i++){
+        // for(int j = 0; j < nthread; j++){
+        //     if(i == 0)
+        //         data[j].is_first = true;
+        //     else
+        //         data[j].is_first = false;
+        //     if(joined_table[query_set[i].q1] == -1)
+        //         data[j].q1_first = true;
+        //     else
+        //         data[j].q1_first = false;
+        //     data[j].query = query_set[i];
+        //     data[j].thread_num = j;
+    
+        //     pthread_create(&thd[j], NULL, join_one_query, (void*)data[j]);
+        // }
+        // for(int j = 0; j < nthread; j++)
+        //     pthread_join(thd[j], NULL);
         join_one_query(query_set[i]);
     }
     int64_t sum = 0;
@@ -1080,7 +1105,7 @@ int64_t join(const char * query){
             }
         }
     }
-    init_join();
+    
     
     return sum;
 }
