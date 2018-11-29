@@ -14,34 +14,22 @@ vector<query_t> query_set;
 int joined_table[TABLE_LIMIT + 1] = {-1, };
 int table_num = 0;
 
-table join_table[TABLE_LIMIT + 1];
+table table_list[TABLE_LIMIT + 1];
 vector< vector<pair<int64_t, int64_t> > > index_record;
 #define INDEX(row, table) index_record[row][table].first
 #define KEY(row, table) index_record[row][table].second
 // Buffer Manager
 
-void print_page(buffer * buf){
-    if(buf->page_num == 0){
-        cout << "free page " << buf->frame->free_page_offset<<endl;
-        cout << "root page " << buf->frame->root_page_offset << endl;
-        cout << "page num " << buf->frame->num_of_pages<<endl;
-        cout << "column " << buf->frame->num_of_columns << endl;
-        return;
-    }
-    else{
-        if(buf->frame->is_leaf){
-            cout << "parent " << buf->frame->page_offset << endl;
-            cout << "is leaf " << buf->frame->is_leaf << endl;
-            cout << "num key " << buf->frame->num_of_keys << endl;
-            cout << "right_page_offset " << buf->frame->right_page_offset << endl;
+void print_table(int table_id){
+    int k = 0;
+    for(int i = 0; i < table_list[table_id].index_size; i++){
+        for(int j = 0; j < table_list[table_id].column; j++){
+            // k++;
+            cout << table_list[table_id].record[i][j] << ' ';
         }
-        else{
-            cout << "parent " << buf->frame->page_offset << endl;
-            cout << "is leaf " << buf->frame->is_leaf << endl;
-            cout << "num key " << buf->frame->num_of_keys << endl;
-            cout << "left_page_offset " << buf->frame->left_page_offset << endl;
-        }
+        cout << endl << k << endl;
     }
+    cout << "column " << table_list[table_id].column << endl;
 }
 
 void print_tree(int table_id) {
@@ -49,15 +37,14 @@ void print_tree(int table_id) {
     int i;
     int front = 0;
     int rear = 0;
-
-    buffer * header = get_buffer(table_id, 0);
-    if (header->frame->root_page_offset == 0) {
+    page * header = table_list[table_id].header;
+    if (header->root_page_offset == 0) {
         printf("Empty tree.\n");
         return;
     }
     
-    queue = (pagenum_t*)malloc(sizeof(pagenum_t) * header->frame->num_of_pages);
-    queue[rear] = header->frame->root_page_offset;
+    queue = (pagenum_t*)malloc(sizeof(pagenum_t) * header->num_of_pages);
+    queue[rear] = header->root_page_offset;
     rear++;
     queue[rear] = 0;
     rear++;
@@ -104,7 +91,6 @@ int init_db(int num_buf){
         return -1;
     for(i = 0; i < num_buf; i++){
         bm.bf[i].table_id = -1;
-        bm.bf[i].next_index = i + 1;
         bm.bf[i].page_num = -1;
     }
     for(int i = 0; i <= TABLE_LIMIT; i++)
@@ -117,19 +103,18 @@ int init_db(int num_buf){
 
 int shutdown_db(){
     int i;
-    for(i = 0; i < bm.buffer_num; i++){
-        if(bm.bf[i].is_dirty == true/* && bm.bf[i].pin_count == 0*/){
-            file_write_page(bm.bf[i].table_id, bm.bf[i].page_num, bm.bf[i].frame);
-        }
+    for(i = 1; i <= TABLE_LIMIT; i++){
+        close_table(i);
     }
     delete[] bm.bf;
     table_count = 0;
     next_table_num = 0;
+
     return 0;
 }
 
 buffer * get_buffer(int table_id, pagenum_t pn){
-    int i = 0, prev = -1;
+    int i = 0;
     if(fd[table_id] == -1){
         printf("not opened table\n");
         exit(EXIT_FAILURE);
@@ -141,27 +126,43 @@ buffer * get_buffer(int table_id, pagenum_t pn){
         bm.bf[i].page_num = pn;
         bm.bf[i].is_dirty = false;
         bm.bf[i].pin_count = 1;
-        bm.bf[i].next_index = -1;
+        bm.bf[i].next = -1;
+        bm.bf[i].prev = 0;
         bm.lru = 0;
         bm.mru = 0;
         bm.buffer_num++;
 
         return &bm.bf[i];
     }
-    for(i = bm.lru; i != -1; prev = i, i = bm.bf[i].next_index){
+    for(i = bm.mru; i != -1; i = bm.bf[i].next){
         
         if(bm.bf[i].table_id == table_id && bm.bf[i].page_num == pn){
             bm.bf[i].pin_count++;
+            if(i == bm.mru){
+                return &bm.bf[i];
+            }
+            else if(i == bm.lru){
+                bm.lru = bm.bf[bm.lru].prev;
+                bm.bf[bm.lru].next = -1;
 
-            bm.bf[bm.mru].next_index = i;
-            if(prev == -1)
-                bm.lru = bm.bf[i].next_index;
-            else
-                bm.bf[prev].next_index = bm.bf[i].next_index;
-            bm.bf[i].next_index = -1;
-            bm.mru = i;
-            return &bm.bf[i];
-        }    
+                bm.bf[i].prev = -1;
+                bm.bf[i].next = bm.mru;
+                bm.bf[bm.mru].prev = i;
+                bm.mru = i;
+
+                return &bm.bf[i];
+            }
+            else{
+                bm.bf[bm.bf[i].prev].next = bm.bf[i].next;
+                bm.bf[bm.bf[i].next].prev = bm.bf[i].prev;
+                bm.bf[bm.mru].prev = i;
+                bm.bf[i].next = bm.mru;
+                bm.bf[i].prev = -1;
+                bm.mru = i;
+
+                return &bm.bf[i];
+            }
+        }
     }
 
     if(bm.capacity == bm.buffer_num){
@@ -173,11 +174,14 @@ buffer * get_buffer(int table_id, pagenum_t pn){
         bm.bf[bm.lru].page_num = pn;
         bm.bf[bm.lru].is_dirty = false;
         bm.bf[bm.lru].pin_count = 1;
-        bm.bf[bm.mru].next_index = bm.lru;
-        bm.mru = bm.lru;
-        bm.lru = bm.bf[bm.lru].next_index;
-        bm.bf[bm.mru].next_index = -1;
+       
 
+        bm.bf[bm.mru].prev = bm.lru;
+        bm.bf[bm.lru].next = bm.mru;
+        bm.mru = bm.lru;
+        bm.lru = bm.bf[bm.lru].prev;
+        bm.bf[bm.lru].next = -1;
+        bm.bf[bm.mru].prev = -1;
         return &bm.bf[bm.mru];
     }
     else if(bm.buffer_num < bm.capacity){
@@ -186,8 +190,9 @@ buffer * get_buffer(int table_id, pagenum_t pn){
         bm.bf[bm.buffer_num].page_num = pn;
         bm.bf[bm.buffer_num].is_dirty = false;
         bm.bf[bm.buffer_num].pin_count = 1;
-        bm.bf[bm.buffer_num].next_index = -1;
-        bm.bf[bm.mru].next_index = bm.buffer_num;
+        bm.bf[bm.buffer_num].next = bm.mru;
+        bm.bf[bm.buffer_num].prev = -1;
+        bm.bf[bm.mru].prev = bm.buffer_num;
         bm.mru = bm.buffer_num;
         bm.buffer_num++;
 
@@ -202,8 +207,8 @@ buffer * get_buffer(int table_id, pagenum_t pn){
 buffer * find_leaf(int table_id, int64_t key){
     int i;
     pagenum_t p;
-    buffer * header_buf = get_buffer(table_id, 0);
-    p = header_buf->frame->root_page_offset / PAGE_SIZE;
+    page * header = table_list[table_id].header;
+    p = header->root_page_offset / PAGE_SIZE;
     if(p == 0)
         return NULL;
     buffer * buf = get_buffer(table_id, p);
@@ -278,6 +283,9 @@ int open_table(char * pathname, int num_column){
         return -1;
     }
     // header = (page*)calloc(1, PAGE_SIZE);
+    for(int i = 1; i <= TABLE_LIMIT; i++){
+        cout << "table_column " << table_list[i].column << endl;
+    }
     header = new page();
     id = next_table_num;
     for(i = 1; i <= TABLE_LIMIT; i++){
@@ -299,6 +307,7 @@ int open_table(char * pathname, int num_column){
 
         header->num_of_columns = num_column;
         header->num_of_pages = 1;
+        table_list[id].header = header;
         temp = pwrite(fd[id], header, PAGE_SIZE, SEEK_SET);
         
         if(temp < PAGE_SIZE){
@@ -306,7 +315,6 @@ int open_table(char * pathname, int num_column){
             exit(EXIT_FAILURE);
         }
         table_count++;
-        read_table(id);
         return id;
     }
     fd[id] = open(pathname, O_RDWR | O_SYNC);
@@ -316,6 +324,7 @@ int open_table(char * pathname, int num_column){
             printf("Failed to read header_page\n");
             exit(EXIT_FAILURE);
         }
+        table_list[id].header = header;
         table_count++;
         read_table(id);
         return id;
@@ -333,9 +342,25 @@ int close_table(int table_id){
             bm.buffer_num--;
         }
     }
+    if(table_list[table_id].header != NULL){
+        file_write_page(table_id, 0, table_list[table_id].header);
+        delete table_list[table_id].header;
+    }
+    table_list[table_id].column = 0;
+    table_list[table_id].index_size = 0;
+    for(int i = 0; i < table_list[table_id].record.size(); i++){
+        delete table_list[table_id].record[i];
+    }
+    
+
     fd[table_id] = -1;
     table_count--;
-    next_table_num = table_id;
+    for(i = 1; i <= TABLE_LIMIT; i++){
+        if(fd[i] == -1){
+            next_table_num = i;
+            break;
+        }
+    }
 
     return 0;
 }
@@ -343,51 +368,44 @@ int close_table(int table_id){
 pagenum_t file_alloc_page(int table_id){
     pagenum_t pn;
     page * p;
-    buffer * header_buf = get_buffer(table_id, 0);
-    if(header_buf->frame->free_page_offset == 0){
+    page * header = table_list[table_id].header;
+    if(header->free_page_offset == 0){
         return increase_free_page(table_id);
     }
-    pn = header_buf->frame->free_page_offset / PAGE_SIZE;
+    pn = header->free_page_offset / PAGE_SIZE;
     file_read_page(table_id, pn, &p);
-    header_buf->frame->free_page_offset = p->page_offset;
-    header_buf->is_dirty = true;
-    header_buf->pin_count--;
+    header->free_page_offset = p->page_offset;
     
     delete p;
     return pn;
 }
 
 void file_free_page(buffer * buf){
-    buffer * header_buf = get_buffer(buf->table_id, 0);
-    buf->frame->page_offset = header_buf->frame->free_page_offset;
+    page * header = table_list[buf->table_id].header;
+    buf->frame->page_offset = header->free_page_offset;
     if(buf->frame->is_leaf)
         buf->frame->right_page_offset = 0;
     else
         buf->frame->left_page_offset = 0;
     buf->frame->is_leaf = 1;
     buf->frame->num_of_keys = 0;
-    header_buf->frame->free_page_offset = buf->page_num * PAGE_SIZE;
-    header_buf->is_dirty = true;
-    header_buf->pin_count--;
+    header->free_page_offset = buf->page_num * PAGE_SIZE;
     buf->is_dirty = true;
     buf->pin_count--;
 }
 
 pagenum_t increase_free_page(int table_id){
     int i, temp;
-    buffer * header_buf;
-    header_buf = get_buffer(table_id, 0);
-    pagenum_t pn = header_buf->frame->num_of_pages;
+    page * header = table_list[table_id].header;
+    pagenum_t pn = header->num_of_pages;
     // page * p = (page*)calloc(1, PAGE_SIZE);
     page * p = new page();
-    p->page_offset = header_buf->frame->free_page_offset;
+    p->page_offset = header->free_page_offset;
     p->num_of_keys = 0;
     p->is_leaf = 1;
-    header_buf->frame->free_page_offset = pn * PAGE_SIZE;
-    header_buf->frame->num_of_pages++;
+    header->free_page_offset = pn * PAGE_SIZE;
+    header->num_of_pages++;
     file_write_page(table_id, pn, p);
-    header_buf->is_dirty = true;
-    header_buf->pin_count--;
     // free(p);
     delete p;
     return pn;
@@ -428,18 +446,19 @@ pagenum_t get_left_index(buffer * parent, buffer * left){
     return left_index;
 }
 
-int start_new_tree(buffer * header_buf, int64_t key, int64_t * value){
+int start_new_tree(int table_id, int64_t key, int64_t * value){
     int i;
+    page * header = table_list[table_id].header;
     buffer * root_buf;
-    if(header_buf->frame->free_page_offset == 0){
+    if(header->free_page_offset == 0){
         for(i = 0; i < 10; i++){
-            increase_free_page(header_buf->table_id);
+            increase_free_page(table_id);
         }   
     }
     
-    header_buf->frame->root_page_offset = file_alloc_page(header_buf->table_id) * PAGE_SIZE;
+    header->root_page_offset = file_alloc_page(table_id) * PAGE_SIZE;
     // file_read_page(header->root_page_offset, &root);
-    root_buf = get_buffer(header_buf->table_id, header_buf->frame->root_page_offset / PAGE_SIZE);
+    root_buf = get_buffer(table_id, header->root_page_offset / PAGE_SIZE);
 
     root_buf->frame->page_offset = 0;
     root_buf->frame->is_leaf = true;
@@ -447,11 +466,9 @@ int start_new_tree(buffer * header_buf, int64_t key, int64_t * value){
     root_buf->frame->right_page_offset = 0;
     root_buf->frame->leaf[0].key = key;
     // strcpy(root_buf->frame->leaf[0].value, value);
-    memcpy(root_buf->frame->leaf[0].value, value, sizeof(int64_t) * header_buf->frame->num_of_columns);
+    memcpy(root_buf->frame->leaf[0].value, value, sizeof(int64_t) * header->num_of_columns);
     root_buf->pin_count--;
     root_buf->is_dirty = true;
-    header_buf->pin_count--;
-    header_buf->is_dirty = true;
     return 0;
 }
 
@@ -480,14 +497,13 @@ int insert_into_leaf(buffer * leaf, int64_t key, int64_t * value){
 int insert_into_leaf_after_splitting(int table_id, buffer * leaf, int64_t key, int64_t * value){
     
     pagenum_t new_leaf_num;
-    buffer * header_buf;
+    page * header;
     buffer * new_leaf;
     int insertion_point, split, i, j;
     int64_t new_key;
     leaf_record temp[leaf_order];
-    header_buf = get_buffer(table_id, 0);
-    table_id = header_buf->table_id;
-
+    header = table_list[table_id].header;
+    
     // file_read_page(leaf_num, &leaf);
     new_leaf_num = file_alloc_page(table_id);
     // file_read_page(new_leaf_num, &new_leaf);
@@ -536,10 +552,6 @@ int insert_into_leaf_after_splitting(int table_id, buffer * leaf, int64_t key, i
     new_leaf->frame->page_offset = leaf->frame->page_offset;
     new_key = new_leaf->frame->leaf[0].key;
     
-    header_buf->pin_count--;
- 
-
-
     return insert_into_parent(table_id, leaf, new_key, new_leaf);
 }
 
@@ -573,9 +585,9 @@ int insert_into_new_root(int table_id, buffer * left, int64_t key, buffer * righ
     
     pagenum_t root_num = file_alloc_page(table_id);
     buffer * root_buf = get_buffer(table_id, root_num);
-    buffer * header_buf = get_buffer(table_id, 0);
+    page * header = table_list[table_id].header;
 
-    header_buf->frame->root_page_offset = root_num * PAGE_SIZE;
+    header->root_page_offset = root_num * PAGE_SIZE;
     root_buf->frame->page_offset = 0;
     root_buf->frame->is_leaf = false;
     root_buf->frame->num_of_keys = 1;
@@ -585,8 +597,6 @@ int insert_into_new_root(int table_id, buffer * left, int64_t key, buffer * righ
     left->frame->page_offset = root_num * PAGE_SIZE;
     right->frame->page_offset = root_num * PAGE_SIZE;
     
-    header_buf->is_dirty = true;
-    header_buf->pin_count--;
     root_buf->is_dirty = true;
     root_buf->pin_count--;
     left->is_dirty = true;
@@ -675,18 +685,17 @@ int insert_into_page_after_splitting(buffer * old_page, int left_index, int64_t 
 
 int insert(int table_id, int64_t key, int64_t * value){
     
-    buffer * header_buf = get_buffer(table_id, 0);
+    page * header = table_list[table_id].header;
     buffer * leaf;
 
-    if(header_buf == NULL){
+    if(header == NULL){
         printf("Table is not opened\n");
         return -1;
     }
-    if(header_buf->frame->root_page_offset == 0){
-        return start_new_tree(header_buf, key, value);
+    if(header->root_page_offset == 0){
+        return start_new_tree(table_id, key, value);
     }
     if(find(table_id, key) != NULL){
-        header_buf->pin_count--;
         return -1;
     }
     leaf = find_leaf(table_id, key);
@@ -741,26 +750,22 @@ void remove_entry_from_page(buffer * buf, int64_t key){
 
 int adjust_root(buffer * buf){
     
-    buffer * child, * header;
-    header = get_buffer(buf->table_id, 0);
+    buffer * child;
+    page * header = table_list[buf->table_id].header;
     if(buf->frame->num_of_keys == 0){
         if(!buf->frame->is_leaf){
             child = get_buffer(buf->table_id, buf->frame->left_page_offset / PAGE_SIZE);
             child->frame->page_offset = 0;
-            header->frame->root_page_offset = buf->frame->left_page_offset / PAGE_SIZE;
+            header->root_page_offset = buf->frame->left_page_offset / PAGE_SIZE;
             file_free_page(buf);
 
-            header->is_dirty = true;
-            header->pin_count--;
             child->is_dirty = true;
             child->pin_count--;
 
         }
         else{
-            header->frame->root_page_offset = 0;
+            header->root_page_offset = 0;
             file_free_page(buf);
-            header->is_dirty = true;
-            header->pin_count--;
         }
     }
     return 0;
@@ -827,16 +832,16 @@ int coalesce_nodes(buffer * buf, pagenum_t neighbor_num, int neighbor_index, int
 
 int delete_entry(int table_id, buffer * buf, int64_t key){
     pagenum_t neighbor_num;
-    buffer * parent, * header;
+    buffer * parent;
+    page * header = table_list[table_id].header;
     int neighbor_index;
     int k_prime_index;
     int64_t k_prime;
     int capacity;
 
-    header = get_buffer(table_id, 0);
 
     remove_entry_from_page(buf, key);
-    if(buf->page_num * PAGE_SIZE == header->frame->root_page_offset)
+    if(buf->page_num * PAGE_SIZE == header->root_page_offset)
         return adjust_root(buf);
 
     if(buf->frame->num_of_keys > 0){
@@ -958,36 +963,47 @@ int parse(string query){
 }
 
 void read_table(int table_id){
-    buffer * header = get_buffer(table_id, 0);
-    buffer * temp = get_buffer(table_id, header->frame->root_page_offset / PAGE_SIZE);
+    page * header = table_list[table_id].header;
+    int64_t * row;
+    if(header->root_page_offset == 0){
+        return;
+    }
+    buffer * temp = get_buffer(table_id, header->root_page_offset / PAGE_SIZE);
     while(!temp->frame->is_leaf){
         temp->pin_count = 0;
         temp = get_buffer(table_id, temp->frame->left_page_offset / PAGE_SIZE);
     }
     while(temp->frame->right_page_offset != 0){
+        
         for(int i = 0; i < temp->frame->num_of_keys; i++){
-            int64_t * row = new int64_t[header->frame->num_of_columns];
+            row = new int64_t[header->num_of_columns];
             row[0] = temp->frame->leaf[i].key;
-            for(int j = 1; j < header->frame->num_of_columns; j++){
+            for(int j = 1; j < header->num_of_columns; j++){
                 row[j] = temp->frame->leaf[i].value[j - 1];
             }
-            join_table[table_id].record.push_back(row);
+            table_list[table_id].record.push_back(row);
+            // for(int i = 0; i < header->num_of_columns; i++)
+            //     cout << row[i] << ' ';
+            // cout << endl;
         }
+        
         temp->pin_count = 0;
         temp = get_buffer(table_id, temp->frame->right_page_offset / PAGE_SIZE);
     }
+    
     for(int i = 0; i < temp->frame->num_of_keys; i++){
-        int64_t * row = new int64_t[header->frame->num_of_columns];
+        
+        row = new int64_t[header->num_of_columns];
         row[0] = temp->frame->leaf[i].key;
-        for(int j = 1; j < header->frame->num_of_columns; j++){
+        for(int j = 1; j < header->num_of_columns; j++){
             row[j] = temp->frame->leaf[i].value[j - 1];
         }
-        join_table[table_id].record.push_back(row);
+        table_list[table_id].record.push_back(row);
     }
-    join_table[table_id].index_size = join_table[table_id].record.size();
+    table_list[table_id].column = header->num_of_columns;
+    table_list[table_id].index_size = table_list[table_id].record.size();
    
     
-    header->pin_count = 0;
     temp->pin_count = 0;
 }
 
@@ -997,12 +1013,12 @@ void join_one_query(query_t q){
     if(table_num == 0){
         joined_table[q.t1] = table_num++;
         joined_table[q.t2] = table_num++;
-        for(int i = 0; i < join_table[q.t1].index_size; i++){
-            for(int j = 0; j < join_table[q.t2].index_size; j++){
-                if(join_table[q.t1].record[i][q.c1 - 1] == join_table[q.t2].record[j][q.c2 - 1]){
+        for(int i = 0; i < table_list[q.t1].index_size; i++){
+            for(int j = 0; j < table_list[q.t2].index_size; j++){
+                if(table_list[q.t1].record[i][q.c1 - 1] == table_list[q.t2].record[j][q.c2 - 1]){
                     vector<pair<int64_t, int64_t> > v;
-                    v.push_back(make_pair(i, join_table[q.t1].record[i][0]));
-                    v.push_back(make_pair(j, join_table[q.t2].record[j][0]));
+                    v.push_back(make_pair(i, table_list[q.t1].record[i][0]));
+                    v.push_back(make_pair(j, table_list[q.t2].record[j][0]));
                     index_record.push_back(v);
                 }
             }
@@ -1012,9 +1028,9 @@ void join_one_query(query_t q){
         if(joined_table[q.t1] != -1){
             joined_table[q.t2] = table_num++;
             for(int i = 0; i < index_record.size(); i++){
-                for(int j = 0; j < join_table[q.t2].index_size; j++){
-                    if(join_table[q.t1].record[INDEX(i, joined_table[q.t1])][q.c1 - 1] == join_table[q.t2].record[j][q.c2 - 1]){
-                        index_record[i].push_back(make_pair(j, join_table[q.t2].record[j][0]));
+                for(int j = 0; j < table_list[q.t2].index_size; j++){
+                    if(table_list[q.t1].record[INDEX(i, joined_table[q.t1])][q.c1 - 1] == table_list[q.t2].record[j][q.c2 - 1]){
+                        index_record[i].push_back(make_pair(j, table_list[q.t2].record[j][0]));
                         tv.push_back(index_record[i]);
                         index_record[i].pop_back();
                     }
@@ -1025,9 +1041,9 @@ void join_one_query(query_t q){
         else{
             joined_table[q.t1] = table_num++;
             for(int i = 0; i < index_record.size(); i++){
-                for(int j = 0; j < join_table[q.t1].index_size; j++){
-                    if(join_table[q.t1].record[j][q.c1 - 1] == join_table[q.t2].record[INDEX(i, joined_table[q.t2])][q.c2 - 1]){
-                        index_record[i].push_back(make_pair(j, join_table[q.t1].record[j][0]));
+                for(int j = 0; j < table_list[q.t1].index_size; j++){
+                    if(table_list[q.t1].record[j][q.c1 - 1] == table_list[q.t2].record[INDEX(i, joined_table[q.t2])][q.c2 - 1]){
+                        index_record[i].push_back(make_pair(j, table_list[q.t1].record[j][0]));
                         tv.push_back(index_record[i]);
                         index_record[i].pop_back();
                     }

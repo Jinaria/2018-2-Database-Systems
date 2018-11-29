@@ -111,7 +111,8 @@ typedef struct buffer{
 	pagenum_t page_num;
 	bool is_dirty;
 	int pin_count;
-	int next_index;
+	int next;
+	int prev;
 }buffer;
 
 typedef struct buffer_manager{
@@ -130,7 +131,9 @@ typedef struct query{
 }query_t;
 
 typedef struct table{
+	page * header;
 	vector<int64_t *> record;
+	int column;
 	int index_size;
 }table;
 
@@ -143,7 +146,7 @@ extern int next_table_num;
 
 //Utility and Find
 //int path_to_root(pagenum_t child);
-void print_page(buffer * buf);
+void print_table(int table_id);
 void print_tree(int table_id);
 buffer * find_leaf(int table_id, int64_t key);
 int64_t * find(int table_id, int64_t key);
@@ -171,7 +174,7 @@ int close_table(int table_id);
 // Insertion
 
 pagenum_t get_left_index(buffer * parent, buffer * left);
-int start_new_tree(buffer * header_buf, int64_t key, int64_t * value);
+int start_new_tree(int table_id, int64_t key, int64_t * value);
 int insert_into_leaf(buffer * leaf, int64_t key, int64_t * value);
 int insert_into_leaf_after_splitting(int table_id, buffer * leaf, int64_t key, int64_t * value);
 int insert_into_parent(int table_id, buffer * left, int64_t key, buffer * right);
