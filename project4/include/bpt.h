@@ -25,6 +25,7 @@ using namespace std;
 #define VALUE_SIZE 15
 #define TABLE_LIMIT 10
 #define BUFFER_SIZE 160
+#define MAX_THREAD 50
 
 typedef unsigned long long pagenum_t;
 
@@ -140,7 +141,7 @@ typedef struct table{
 
 typedef struct table_data{
 	bool is_first;
-	bool q1_first;
+	bool t1_first;
 	query_t query;
 	int thread_num;
 }table_data;

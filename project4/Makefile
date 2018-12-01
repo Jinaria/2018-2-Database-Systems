@@ -24,9 +24,9 @@ TARGET=main
 all: $(TARGET)
 
 $(TARGET): $(TARGET_OBJ)
-	$(CXX) $(CPPFLAGS) -o $(OBJS_FOR_LIB) -c $(SRCS_FOR_LIB)
+	$(CXX) $(CPPFLAGS) -o $(OBJS_FOR_LIB) -c $(SRCS_FOR_LIB) -lpthread
 	make static_library
-	$(CXX) $(CPPFLAGS) -o $@ $^ -L $(LIBS) -lbpt
+	$(CXX) $(CPPFLAGS) -o $@ $^ -L $(LIBS) -lbpt -lpthread
 
 clean:
 	rm $(TARGET) $(TARGET_OBJ) $(OBJS_FOR_LIB) $(LIBS)*

@@ -79,7 +79,6 @@ int main(int argc, char ** argv){
 				return 0;
 			case 'q':
 				scanf("%s", s);
-				printf("%s\n", s);
 				num = join(s);
 				cout << "sum : " << num << endl;
 				getchar();
