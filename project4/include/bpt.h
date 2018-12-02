@@ -11,6 +11,7 @@
 #include <vector>
 #include <iostream>
 #include <utility>
+#include <algorithm>
 #include <pthread.h>
 #ifdef WINDOWS
 #endif
@@ -139,12 +140,10 @@ typedef struct table{
 	int index_size;
 }table;
 
-typedef struct table_data{
-	bool is_first;
-	bool t1_first;
-	query_t query;
-	int thread_num;
-}table_data;
+typedef struct join_data{
+	pair<int64_t, int64_t> **record;
+	int64_t data_size;
+}join_data;
 
 extern buffer_manager bm;
 extern int leaf_order;
@@ -206,7 +205,9 @@ void swap(int * a, int * b);
 int parse(string query);
 query_t parse_query(string q);
 vector<query_t> sort_query(vector<query_t> v);
+void clear_data();
 void read_table(int table_id);
+void init_join();
 void join_one_query(query_t q);
 int64_t join(const char * query);
 

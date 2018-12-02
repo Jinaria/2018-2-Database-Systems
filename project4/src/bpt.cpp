@@ -13,12 +13,18 @@ int next_table_num = 1;
 vector<query_t> query_set;
 int joined_table[TABLE_LIMIT + 1] = {-1, };
 int table_num = 0;
-int max_table_size = 0;
+int max_table_size = 0, second_table_size = 0;
+
+int nthread = 50;
+pthread_t * thd;
+int thd_num;
+
 
 table table_list[TABLE_LIMIT + 1];
 
-vector<vector<pair<int64_t , int64_t> > > index_record;
-int64_t index_record_size = 0;
+join_data index_record;
+pair<int64_t, int64_t> ** tv;
+bool first = true;
 // int thd_cnt = 0;
 // vector< vector<pair<int64_t, int64_t> > > index_record, *temp_v;
 // #define INDEX(row, table) index_record[row][table].first
@@ -115,6 +121,7 @@ int shutdown_db(){
     delete[] bm.bf;
     table_count = 0;
     next_table_num = 0;
+    clear_data();
 
     return 0;
 }
@@ -1002,21 +1009,35 @@ void read_table(int table_id){
     }
     table_list[table_id].column = header->num_of_columns;
     table_list[table_id].index_size = table_list[table_id].record.size();
-    if(max_table_size <= table_list[table_id].index_size)
+    if(max_table_size < table_list[table_id].index_size){
+        second_table_size = max_table_size;
         max_table_size = table_list[table_id].index_size;
+    }
     
     temp->pin_count = 0;
 }
 
 
+
+void clear_data(){
+    for(int64_t i = 0; i < max_table_size * 10; i++){
+        delete tv[i];
+        delete index_record.record[i];
+    }
+    delete tv;
+    delete index_record.record;
+    delete thd; 
+}
+
 void join_one_query(query_t q){ //hash join
-    vector<pair<int64_t, int64_t> > v;
+    pair<int64_t, int64_t> ** temp;
     int64_t table_size = table_list[q.t1].index_size > table_list[q.t2].index_size ? table_list[q.t1].index_size : table_list[q.t2].index_size;
     
     vector<vector<pair<int64_t, int64_t> > > hash_table(table_size * 2);
+    int total_table_num = query_set.size() + 1;
+    
     int64_t cnt = 0;
     if(table_num == 0){
-        int sum = 0;
         joined_table[q.t1] = table_num++;
         joined_table[q.t2] = table_num++;
         // index_record.reserve(table_list[q.t1].index_size * table_list[q.t2].index_size);
@@ -1028,19 +1049,18 @@ void join_one_query(query_t q){ //hash join
         // cout << "12\n" << endl;
         for(int64_t i = 0; i < table_list[q.t2].index_size; i++){
             int64_t hashed = table_list[q.t2].record[i][q.c2 - 1] % table_size;
-            // cout << 3 << endl;
             for(int64_t j = 0; j < hash_table[hashed].size(); j++){
-                // cout << 4 << endl;
-                // cout << hash_table[hashed][j].second << endl;
-                // cout << table_list[q.t2].record[i][q.c2 - 1] << endl;
-
                 if(hash_table[hashed][j].second == table_list[q.t2].record[i][q.c2 - 1]){
                     // cout << 1 << endl;
-                    v.push_back(make_pair(hash_table[hashed][j].first, table_list[q.t1].record[hash_table[hashed][j].first][0]));
-
-                    v.push_back(make_pair(i, table_list[q.t2].record[i][0]));
-                    index_record.push_back(v);
-                    v.clear();
+                    // v.push_back(make_pair(hash_table[hashed][j].first, table_list[q.t1].record[hash_table[hashed][j].first][0]));
+                    // v[0] = make_pair(hash_table[hashed][j].first, table_list[q.t1].record[hash_table[hashed][j].first][0]);
+                    // v.push_back(make_pair(i, table_list[q.t2].record[i][0]));
+                    // v[1] = make_pair(i, table_list[q.t2].record[i][0]);
+                    // index_record.push_back(v);
+                    // index_record[cnt++] = v;
+                    index_record.record[cnt][0] = make_pair(hash_table[hashed][j].first, table_list[q.t1].record[hash_table[hashed][j].first][0]);
+                    index_record.record[cnt][1] = make_pair(i, table_list[q.t2].record[i][0]);
+                    cnt++;
                     // cout << cnt << ' ' << sum << endl;
 
                 }
@@ -1048,72 +1068,93 @@ void join_one_query(query_t q){ //hash join
             // cout << 2 << endl;
         }
         // cout << "13\n" << endl;
-        // index_record_size = cnt;
+        index_record.data_size = cnt;
     }
     else{
         if(joined_table[q.t1] == -1){
-            vector<vector<pair<int64_t, int64_t> > > tv;
-            
             joined_table[q.t1] = table_num++;
-            // cout << "21\n" << endl;
-            for(int64_t i = 0; i < index_record.size(); i++){
-                int64_t hashed = table_list[q.t2].record[index_record[i][joined_table[q.t2]].first][q.c2 - 1] % table_size;
-                hash_table[hashed].push_back(make_pair(i, table_list[q.t2].record[index_record[i][joined_table[q.t2]].first][q.c2 - 1]));
+            for(int64_t i = 0; i < index_record.data_size; i++){
+                int64_t hashed = table_list[q.t2].record[index_record.record[i][joined_table[q.t2]].first][q.c2 - 1] % table_size;
+                hash_table[hashed].push_back(make_pair(i, table_list[q.t2].record[index_record.record[i][joined_table[q.t2]].first][q.c2 - 1]));
             }
-            // cout << "22\n" << endl;
             for(int64_t i = 0; i < table_list[q.t1].index_size; i++){
 
                 int64_t hashed = table_list[q.t1].record[i][q.c1 - 1] % table_size;
                 for(int64_t j = 0; j < hash_table[hashed].size(); j++){
                     if(hash_table[hashed][j].second == table_list[q.t1].record[i][q.c1 - 1]){
 
-                        index_record[hash_table[hashed][j].first].push_back(make_pair(i, table_list[q.t1].record[i][0]));
-                        tv.push_back(index_record[hash_table[hashed][j].first]);
-                        index_record[hash_table[hashed][j].first].pop_back();
+                        for(int k = 0; k < table_num - 1; k++){
+                            tv[cnt][k] = index_record.record[hash_table[hashed][j].first][k];
+                        }
+                        tv[cnt][table_num - 1] = make_pair(i, table_list[q.t1].record[i][0]);
+                        cnt++;
+                    }
+                } 
+            }
+            temp = index_record.record;
+            index_record.record = tv;
+            tv = temp;
+            index_record.data_size = cnt;
+        }
+        else{
+            joined_table[q.t2] = table_num++;
+            // cout << "21\n" << endl;
+            for(int64_t i = 0; i < index_record.data_size; i++){
+                int64_t hashed = table_list[q.t1].record[index_record.record[i][joined_table[q.t1]].first][q.c1 - 1] % table_size;
+                hash_table[hashed].push_back(make_pair(i, table_list[q.t1].record[index_record.record[i][joined_table[q.t1]].first][q.c1 - 1]));
+            }
+            // cout << "22\n" << endl;
+            for(int64_t i = 0; i < table_list[q.t2].index_size; i++){
+
+                int64_t hashed = table_list[q.t2].record[i][q.c2 - 1] % table_size;
+                for(int64_t j = 0; j < hash_table[hashed].size(); j++){
+                    if(hash_table[hashed][j].second == table_list[q.t2].record[i][q.c2 - 1]){
+
+                        for(int k = 0; k < table_num - 1; k++){
+                            tv[cnt][k] = index_record.record[hash_table[hashed][j].first][k];
+                        }
+                        tv[cnt][table_num - 1] = make_pair(i, table_list[q.t2].record[i][0]);
+                        cnt++;
                     }
                 }
             }
-            // cout << "23\n" << endl;
-            // index_record_size = cnt;
-            index_record = tv;
-        }
-        else{
-            vector<vector<pair<int64_t, int64_t> > > tv;
-            joined_table[q.t2] = table_num++;
-            // cout << "31\n" << endl;
-            for(int64_t i = 0; i < index_record.size(); i++){
-                int64_t hashed = table_list[q.t1].record[index_record[i][joined_table[q.t1]].first][q.c1 - 1] % table_size;
-                hash_table[hashed].push_back(make_pair(i, table_list[q.t1].record[index_record[i][joined_table[q.t1]].first][q.c1 - 1]));
-            }
-            // cout << "32\n" << endl;
-            for(int64_t i = 0; i < table_list[q.t2].index_size; i++){
-             
-                int64_t hashed = table_list[q.t2].record[i][q.c2 - 1] % table_size;
-                for(int64_t j = 0; j < hash_table[hashed].size(); j++){                
-                    if(hash_table[hashed][j].second == table_list[q.t2].record[i][q.c2 - 1]){
-                        
-                        index_record[hash_table[hashed][j].first].push_back(make_pair(i, table_list[q.t2].record[i][0]));
-                        tv.push_back(index_record[hash_table[hashed][j].first]);
-                        index_record[hash_table[hashed][j].first].pop_back();
-                    }
-                } 
-             
-            }
-            // cout << "33\n" << endl;
-            // index_record_size = cnt;
-            index_record = tv;
+            temp = index_record.record;
+            index_record.record = tv;
+            tv = temp;
+            index_record.data_size = cnt;
         }
     }
 }
 
+void * init_alloc(void * xa){
+    int64_t num = (int64_t)xa;
+    for(int64_t i = num; i < max_table_size * 10; i += nthread){
+        index_record.record[i] = new pair<int64_t, int64_t>[TABLE_LIMIT]();
+        tv[i] = new pair<int64_t, int64_t>[TABLE_LIMIT]();
+    }
+}
+
 void init_join(){
+    if(first){
+        index_record.record = new pair<int64_t, int64_t>*[max_table_size * 10]();
+        tv = new pair<int64_t, int64_t>*[max_table_size * 10]();
+        if(max_table_size <= 10000)
+            nthread = 10;
+        thd = new pthread_t[nthread]();
+        for(int64_t i = 0; i < nthread; i++){
+            pthread_create(&thd[i], NULL, init_alloc, (void*)i);
+        }
+        for(int i = 0; i < nthread; i++){
+            pthread_join(thd[i], NULL);
+        }
+        first = false;
+    }
     query_set.clear();
     for(int i = 1; i <= TABLE_LIMIT; i++){
         joined_table[i] = -1;
     }
-    
-    index_record.clear();
     table_num = 0;
+    index_record.data_size = 0;
 }
 
 int64_t join(const char * query){
@@ -1126,10 +1167,10 @@ int64_t join(const char * query){
     }
 
     int64_t sum = 0;
-    for(int i = 0; i < index_record.size(); i++){
+    for(int i = 0; i < index_record.data_size; i++){
         for(int j = 0; j < table_num; j++){
             
-                sum += index_record[i][j].second;
+                sum += index_record.record[i][j].second;
             
         }
     }
