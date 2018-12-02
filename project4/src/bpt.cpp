@@ -15,7 +15,7 @@ int joined_table[TABLE_LIMIT + 1] = {-1, };
 int table_num = 0;
 int max_table_size = 0, second_table_size = 0;
 
-int nthread = 50;
+int nthread = 60;
 pthread_t * thd;
 int thd_num;
 
