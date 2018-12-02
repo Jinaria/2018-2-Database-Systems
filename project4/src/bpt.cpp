@@ -1007,67 +1007,19 @@ void read_table(int table_id){
     
     temp->pin_count = 0;
 }
-/*
-void join_one_query(query_t q){ //nested loop join
-    vector<vector<pair<int64_t, int64_t> > > tv;
-   
-    if(table_num == 0){
-        joined_table[q.t1] = table_num++;
-        joined_table[q.t2] = table_num++;
-        for(int i = 0; i < table_list[q.t1].index_size; i++){
-            for(int j = 0; j < table_list[q.t2].index_size; j++){
-                if(table_list[q.t1].record[i][q.c1 - 1] == table_list[q.t2].record[j][q.c2 - 1]){
-                    vector<pair<int64_t, int64_t> > v;
-                    v.push_back(make_pair(i, table_list[q.t1].record[i][0]));
-                    v.push_back(make_pair(j, table_list[q.t2].record[j][0]));
-                    index_record.push_back(v);
-                }
-            }
-        }
-    }
-    else{
-        if(joined_table[q.t1] != -1){
-            joined_table[q.t2] = table_num++;
-            for(int i = 0; i < index_record.size(); i++){
-                for(int j = 0; j < table_list[q.t2].index_size; j++){
-                    if(table_list[q.t1].record[INDEX(i, joined_table[q.t1])][q.c1 - 1] == table_list[q.t2].record[j][q.c2 - 1]){
-                        index_record[i].push_back(make_pair(j, table_list[q.t2].record[j][0]));
-                        tv.push_back(index_record[i]);
-                        index_record[i].pop_back();
-                    }
-                }
-            }
-            index_record = tv;
-        }
-        else{
-            joined_table[q.t1] = table_num++;
-            for(int i = 0; i < index_record.size(); i++){
-                for(int j = 0; j < table_list[q.t1].index_size; j++){
-                    if(table_list[q.t1].record[j][q.c1 - 1] == table_list[q.t2].record[INDEX(i, joined_table[q.t2])][q.c2 - 1]){
-                        index_record[i].push_back(make_pair(j, table_list[q.t1].record[j][0]));
-                        tv.push_back(index_record[i]);
-                        index_record[i].pop_back();
-                    }
-                }
-            }
 
-            index_record = tv;
-        }
-    }
-}
-*/
 
 void join_one_query(query_t q){ //hash join
-    vector<pair<int64_t, int64_t> > v(2);
+    vector<pair<int64_t, int64_t> > v;
     int64_t table_size = table_list[q.t1].index_size > table_list[q.t2].index_size ? table_list[q.t1].index_size : table_list[q.t2].index_size;
     
-    vector<vector<pair<int64_t, int64_t> > > tv, hash_table(table_size * 2);
+    vector<vector<pair<int64_t, int64_t> > > hash_table(table_size * 2);
     int64_t cnt = 0;
     if(table_num == 0){
         int sum = 0;
         joined_table[q.t1] = table_num++;
         joined_table[q.t2] = table_num++;
-        index_record.resize(table_list[q.t1].index_size * table_list[q.t2].index_size);
+        // index_record.reserve(table_list[q.t1].index_size * table_list[q.t2].index_size);
         // cout << "11\n" << endl;
         for(int64_t i = 0; i < table_list[q.t1].index_size; i++){
             int64_t hashed = table_list[q.t1].record[i][q.c1 - 1] % table_size;
@@ -1084,12 +1036,11 @@ void join_one_query(query_t q){ //hash join
 
                 if(hash_table[hashed][j].second == table_list[q.t2].record[i][q.c2 - 1]){
                     // cout << 1 << endl;
-                    v[0] = make_pair(hash_table[hashed][j].first, table_list[q.t1].record[hash_table[hashed][j].first][0]);
+                    v.push_back(make_pair(hash_table[hashed][j].first, table_list[q.t1].record[hash_table[hashed][j].first][0]));
 
-                    v[1] = make_pair(i, table_list[q.t2].record[i][0]);
-                    index_record[cnt++] = v;
-                    
-                    sum = sum + index_record[cnt - 1][0].second + index_record[cnt - 1][1].second;
+                    v.push_back(make_pair(i, table_list[q.t2].record[i][0]));
+                    index_record.push_back(v);
+                    v.clear();
                     // cout << cnt << ' ' << sum << endl;
 
                 }
@@ -1097,14 +1048,15 @@ void join_one_query(query_t q){ //hash join
             // cout << 2 << endl;
         }
         // cout << "13\n" << endl;
-        index_record_size = cnt;
+        // index_record_size = cnt;
     }
     else{
-        if(joined_table[q.t1] == -1){        
-            tv.resize(index_record_size * table_list[q.t1].index_size);
+        if(joined_table[q.t1] == -1){
+            vector<vector<pair<int64_t, int64_t> > > tv;
+            
             joined_table[q.t1] = table_num++;
             // cout << "21\n" << endl;
-            for(int64_t i = 0; i < index_record_size; i++){
+            for(int64_t i = 0; i < index_record.size(); i++){
                 int64_t hashed = table_list[q.t2].record[index_record[i][joined_table[q.t2]].first][q.c2 - 1] % table_size;
                 hash_table[hashed].push_back(make_pair(i, table_list[q.t2].record[index_record[i][joined_table[q.t2]].first][q.c2 - 1]));
             }
@@ -1116,20 +1068,20 @@ void join_one_query(query_t q){ //hash join
                     if(hash_table[hashed][j].second == table_list[q.t1].record[i][q.c1 - 1]){
 
                         index_record[hash_table[hashed][j].first].push_back(make_pair(i, table_list[q.t1].record[i][0]));
-                        tv[cnt++] = index_record[hash_table[hashed][j].first];
+                        tv.push_back(index_record[hash_table[hashed][j].first]);
                         index_record[hash_table[hashed][j].first].pop_back();
                     }
                 }
             }
             // cout << "23\n" << endl;
-            index_record_size = cnt;
+            // index_record_size = cnt;
             index_record = tv;
         }
         else{
-            tv.resize(index_record_size * table_list[q.t2].index_size);
+            vector<vector<pair<int64_t, int64_t> > > tv;
             joined_table[q.t2] = table_num++;
             // cout << "31\n" << endl;
-            for(int64_t i = 0; i < index_record_size; i++){
+            for(int64_t i = 0; i < index_record.size(); i++){
                 int64_t hashed = table_list[q.t1].record[index_record[i][joined_table[q.t1]].first][q.c1 - 1] % table_size;
                 hash_table[hashed].push_back(make_pair(i, table_list[q.t1].record[index_record[i][joined_table[q.t1]].first][q.c1 - 1]));
             }
@@ -1141,14 +1093,14 @@ void join_one_query(query_t q){ //hash join
                     if(hash_table[hashed][j].second == table_list[q.t2].record[i][q.c2 - 1]){
                         
                         index_record[hash_table[hashed][j].first].push_back(make_pair(i, table_list[q.t2].record[i][0]));
-                        tv[cnt++] = index_record[hash_table[hashed][j].first];
+                        tv.push_back(index_record[hash_table[hashed][j].first]);
                         index_record[hash_table[hashed][j].first].pop_back();
                     }
                 } 
              
             }
             // cout << "33\n" << endl;
-            index_record_size = cnt;
+            // index_record_size = cnt;
             index_record = tv;
         }
     }
@@ -1162,51 +1114,7 @@ void init_join(){
     
     index_record.clear();
     table_num = 0;
-    // thd_num = 0;
 }
-
-// void * join_one_query(void * data_t){ //thread nested loop join
-//     table_data * data = (table_data *) data_t;
-//     query_t q = data->query;
-   
-//     if(data->is_first){
-//         for(int i = 0; i < table_list[q.t1].index_size; i++){
-//             for(int j = data->thread_num; j < table_list[q.t2].index_size; j += thd_num){
-//                 if(table_list[q.t1].record.at(i).at(q.c1 - 1) == table_list[q.t2].record.at(j).at(q.c2 - 1)){
-//                     vector<pair<int64_t, int64_t> > v;
-//                     v.push_back(make_pair(i, table_list[q.t1].record.at(i).at(0)));
-//                     v.push_back(make_pair(j, table_list[q.t2].record.at(j).at(0)));
-//                     index_record.push_back(v);
-//                 }
-//             }
-//         }
-//     }
-//     else{
-//         if(!data->t1_first){
-//             for(int i = 0; i < index_record.size(); i++){
-//                 for(int j = data->thread_num; j < table_list[q.t2].index_size; j += thd_num){
-//                     if(table_list[q.t1].record.at(INDEX(i, joined_table[q.t1])).at(q.c1 - 1) == table_list[q.t2].record.at(j).at(q.c2 - 1)){
-//                         index_record.at(i).push_back(make_pair(j, table_list[q.t2].record.at(j).at(0)));
-//                         temp_v[data->thread_num].push_back(index_record.at(i));
-//                         index_record.at(i).pop_back();
-//                     }
-//                 }
-//             }
-//         }
-//         else{
-//             for(int i = 0; i < index_record.size(); i++){
-//                 for(int j = data->thread_num; j < table_list[q.t1].index_size; j += thd_num){
-//                     if(table_list[q.t1].record.at(j).at(q.c1 - 1) == table_list[q.t2].record.at(INDEX(i, joined_table[q.t2])).at(q.c2 - 1)){
-//                         index_record.at(i).push_back(make_pair(j, table_list[q.t1].record.at(j).at(0)));
-//                         temp_v[data->thread_num].push_back(index_record.at(i));
-//                         index_record.at(i).pop_back();
-//                     }
-//                 }
-//             }
-//         }
-//     }
-//     return NULL;
-// }
 
 int64_t join(const char * query){
     init_join();
@@ -1216,66 +1124,9 @@ int64_t join(const char * query){
         // cout << i << endl;
         join_one_query(query_set[i]);
     }
-    // if(max_table_size < 2000)
-    //     nthread = 10;
-    // else
-    //     nthread = 50;
-
-    // pthread_t * thd = (pthread_t *)malloc(sizeof(pthread_t) * nthread);
-    // table_data * data = new table_data[nthread]();
-    // temp_v = new vector<vector<pair<int64_t, int64_t> > >[nthread]();
-    
-    // for(int i = 0; i < query_num; i++){
-
-    //     if(i == 0){
-    //         thd_num = table_list[query_set[i].t2].index_size / nthread;
-    //         for(int j = 0; j < nthread; j++){
-    //             data[j].is_first = true;
-    //             data[j].query = query_set[i];
-    //             data[j].thread_num = j;
-    //             pthread_create(&thd[j], NULL, join_one_query, (void*)(&data[j]));
-    //         }
-    //     }
-    //     else{
-    //         if(joined_table[query_set[i].t1] == -1){
-    //             thd_num = table_list[query_set[i].t1].index_size / nthread;
-    //             for(int j = 0; j < nthread; j++){
-    //                 data[j].is_first = false;
-    //                 data[j].t1_first = true;
-    //                 data[j].query = query_set[i];
-    //                 data[j].thread_num = j;
-    //                 pthread_create(&thd[j], NULL, join_one_query, (void*)(&data[j]));
-    //             }
-    //         }
-    //         else{
-    //             thd_num = table_list[query_set[i].t2].index_size / nthread;
-    //             for(int j = 0; j < nthread; j++){
-    //                 data[j].is_first = false;
-    //                 data[j].t1_first = false;
-    //                 data[j].query = query_set[i];
-    //                 data[j].thread_num = j;
-    //                 pthread_create(&thd[j], NULL, join_one_query, (void*)(&data[j]));
-    //             }   
-    //         }
-    //     }
-    //     if(joined_table[query_set[i].t1] == -1)
-    //         joined_table[query_set[i].t1] = table_num++;
-    //     if(joined_table[query_set[i].t2] == -1)
-    //         joined_table[query_set[i].t2] = table_num++;
-
-    //     for(int j = 0; j < nthread; j++)
-    //         pthread_join(thd[j], NULL);
-    //     index_record.clear();
-    //     for(int j = 0; j < nthread; j++)
-    //         index_record.insert(index_record.end(), temp_v[j].begin(), temp_v[j].end());
-    //     // join_one_query(query_set[i]);
-    // }
-    // free(thd);
-    // delete data;
-    // delete temp_v;
 
     int64_t sum = 0;
-    for(int i = 0; i < index_record_size; i++){
+    for(int i = 0; i < index_record.size(); i++){
         for(int j = 0; j < table_num; j++){
             
                 sum += index_record[i][j].second;
