@@ -903,7 +903,10 @@ int64_t * find(int table_id, int64_t key, int tid, int * result){
     pthread_mutex_lock(&buf_man_lock);
     buf = find_leaf(table_id, key);
 
-    if(buf == NULL) return NULL;
+    if(buf == NULL){
+        pthread_mutex_unlock(&buf_man_lock);
+        return NULL;   
+    }
     
     auto temp = table_list[table_id].hash_page.find(buf->page_num);
 
@@ -958,7 +961,10 @@ int update(int table_id, int64_t key, int64_t * value, int tid, int * result){
     pthread_mutex_lock(&buf_man_lock);
 
     leaf = find_leaf(table_id, key);
-    if(leaf == NULL) return -1;
+    if(leaf == NULL){ 
+        pthread_mutex_unlock(&buf_man_lock);
+        return -1;
+    }
 
     auto temp = table_list[table_id].hash_page.find(leaf->page_num);
 
