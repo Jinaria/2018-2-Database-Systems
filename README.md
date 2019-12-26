@@ -2,7 +2,7 @@
 
 ## Overview
 
-[B+tree to Disk file-input-output](./bpt to database/project1/README.md)
+[B+tree to Disk file-input-output](bpt to database/project1/README.md)
 
 [project2](./bpt to database/project2/README.md)
 
