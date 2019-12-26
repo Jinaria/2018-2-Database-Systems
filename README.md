@@ -8,6 +8,3 @@
 
 - [**Multi column and Join table**](TinyDB-project/project3/README.md)
   * key와 value만 저장 가능하던 데이터베이스를 **Multiple column record**를 저장할 수 있고 간단한 **Join**을 실행할 수 있게 바꿉니다.
-
-- [**Concurrency control**](TinyDB-project/project4/README.md)
-  * Multi threading을 사용해 Isolation하고 Consistency한 **Transaction**을 구현합니다.
