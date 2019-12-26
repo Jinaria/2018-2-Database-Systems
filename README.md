@@ -2,10 +2,10 @@
 
 ## Overview
 
-[B+tree to Disk file-input-output](./bpt to database/project1/README.md)
+[B+tree to Disk file-input-output](TinyDB-project/project1/README.md)
 
-[project2](./bpt to database/project2/README.md)
+[project2](TinyDB-project/project2/README.md)
 
-[project3](./bpt to database/project3/README.md)
+[project3](TinyDB-project/project3/README.md)
 
-[project4](./bpt to database/project4/README.md)
+[project4](TinyDB-project/project4/README.md)
