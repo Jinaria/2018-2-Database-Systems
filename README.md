@@ -1,6 +1,13 @@
 # Make tiny RDBMS from B+ tree
 ## Overview
-[B+tree to Disk file-input-output](TinyDB-project/project1/README.md)
-[project2](TinyDB-project/project2/README.md)
-[project3](TinyDB-project/project3/README.md)
-[project4](TinyDB-project/project4/README.md)
+- [**Disk based B+ tree**](TinyDB-project/project1/README.md)
+  * Memory 기반의 B+ tree 자료구조를 **Disk based B+ tree**로 바꿉니다. 
+
+- [**Buffer Management**](TinyDB-project/project2/README.md)
+  * 사용된 페이지를 재사용할 수 있게 하는 **Buffer manager**를 구현합니다.
+
+- [**Multi column and Join table**](TinyDB-project/project3/README.md)
+  * key와 value만 저장 가능하던 데이터베이스를 **Multiple column record**를 저장할 수 있고 간단한 **Join**을 실행할 수 있게 바꿉니다.
+
+- [**Concurrency control**](TinyDB-project/project4/README.md)
+  * Multi threading을 사용해 Isolation하고 Consistency한 **Transaction**을 구현합니다.
